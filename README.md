@@ -5,7 +5,7 @@ A thin Symfony bundle that wires the `Gohany/Circuitbreaker` core library into S
 ## Install
 
 ```bash
-composer require Gohany/Circuitbreaker Gohany/Circuitbreaker-symfony-bundle
+composer require gohany/circuitbreaker gohany/circuitbreaker-symfony-bundle
 ```
 
 Enable the bundle if not using Flex:
