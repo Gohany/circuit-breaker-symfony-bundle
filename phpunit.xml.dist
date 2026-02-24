@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit bootstrap="tests/bootstrap.php" colors="true" verbose="true" failOnWarning="true" failOnRisky="true">
+  <coverage processUncoveredFiles="true">
+    <include>
+      <directory suffix=".php">src</directory>
+    </include>
+  </coverage>
+
   <testsuites>
     <testsuite name="Bundle">
       <directory>tests</directory>
