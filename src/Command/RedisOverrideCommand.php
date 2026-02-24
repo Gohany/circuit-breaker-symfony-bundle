@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Gohany\Circuitbreaker\bundle\Command;
+namespace Gohany\CircuitBreakerSymfonyBundle\Command;
 
 use Gohany\Circuitbreaker\Core\CircuitKey;
 use Gohany\Circuitbreaker\Override\Redis\RedisOverrideAdmin;

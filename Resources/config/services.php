@@ -19,7 +19,7 @@
 // $services->set('app.http.psr18', \Symfony\Component\HttpClient\Psr18Client::class)
 //     ->args([service('http_client')]);
 //
-// $services->set('Gohany.circuitbreaker.http_client', \Gohany\Circuitbreaker\bundle\Http\CircuitBreakerHttpClient::class)
+// $services->set('Gohany.circuitbreaker.http_client', \Gohany\Circuitbreaker\bundle\Http\CircuitbreakerHttpClient::class)
 //     ->args([
 //         service('app.http.psr18'),
 //         service('Gohany.circuitbreaker.default'),

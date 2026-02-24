@@ -1,6 +1,6 @@
 <?php
 
-namespace Gohany\Circuitbreaker\bundle\Clock;
+namespace Gohany\CircuitBreakerSymfonyBundle\Clock;
 
 use DateTimeImmutable;
 use DateTimeZone;

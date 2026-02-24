@@ -1,6 +1,8 @@
 <?php
 
-namespace Gohany\Circuitbreaker\bundle;
+declare(strict_types=1);
+
+namespace Gohany\CircuitBreakerSymfonyBundle;
 
 use Symfony\Component\HttpKernel\Bundle\Bundle;
 

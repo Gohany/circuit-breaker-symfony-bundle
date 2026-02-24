@@ -8,7 +8,7 @@ use Gohany\Circuitbreaker\Core\CircuitBreakerInterface;
 use Gohany\Circuitbreaker\Core\CircuitContext;
 use Gohany\Circuitbreaker\Core\CircuitKey;
 use Gohany\Circuitbreaker\Defaults\Http\HttpCircuitBuilderInterface;
-use Gohany\Circuitbreaker\bundle\Http\CircuitBreakerHttpClient;
+use Gohany\CircuitBreakerSymfonyBundle\Http\CircuitBreakerHttpClient;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;

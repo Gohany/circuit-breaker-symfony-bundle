@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Gohany\Circuitbreaker\bundle\Command;
+namespace Gohany\CircuitBreakerSymfonyBundle\Command;
 
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;

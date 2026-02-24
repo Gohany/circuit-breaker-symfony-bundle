@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Gohany\Circuitbreaker\bundle\Command;
+namespace Gohany\CircuitBreakerSymfonyBundle\Command;
 
 use Gohany\Circuitbreaker\Integration\Sanity\Output\OutputSideEffectDispatcher;
 use Gohany\Circuitbreaker\Integration\Sanity\SanityCheckRunner;

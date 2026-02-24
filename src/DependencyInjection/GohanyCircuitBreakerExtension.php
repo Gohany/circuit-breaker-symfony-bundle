@@ -1,31 +1,23 @@
 <?php
 
-namespace Gohany\Circuitbreaker\bundle\DependencyInjection;
+declare(strict_types=1);
 
-use Gohany\Circuitbreaker\Core\CircuitBreaker;
-use Gohany\Circuitbreaker\Core\CircuitBreakerInterface;
-use Gohany\Circuitbreaker\Override\Redis\RedisCircuitAdmin;
-use Gohany\Circuitbreaker\Override\Redis\RedisOverrideAdmin;
-use Gohany\Circuitbreaker\Override\Redis\RedisOverrideDecider;
-use Gohany\Circuitbreaker\Override\Redis\RedisOverrideStore;
-use Gohany\Circuitbreaker\Store\CircuitHistoryStoreInterface;
-use Gohany\Circuitbreaker\Store\CircuitStateStoreInterface;
-use Gohany\Circuitbreaker\Store\ProbeGateInterface;
-use Gohany\Circuitbreaker\Store\Redis\RedisCircuitHistoryStore;
-use Gohany\Circuitbreaker\Store\Redis\RedisCircuitStateStore;
-use Gohany\Circuitbreaker\Store\Redis\RedisKeyBuilder;
-use Gohany\Circuitbreaker\Store\Redis\RedisProbeGate;
-use Gohany\Circuitbreaker\Store\Redis\RedisClientInterface;
-use Gohany\Circuitbreaker\bundle\Clock\SystemClock;
-use Gohany\Circuitbreaker\bundle\Command\CircuitBreakerDebugCommand;
-use Gohany\Circuitbreaker\bundle\Command\CircuitBreakerSanityCheckCommand;
-use Gohany\Circuitbreaker\bundle\Command\RedisOverrideCommand;
-use Gohany\Circuitbreaker\bundle\Registry\CircuitBreakerRegistry;
-use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+namespace Gohany\CircuitBreakerSymfonyBundle\DependencyInjection;
+
+use Gohany\Circuitbreaker\Bulkhead\LanePolicy;
+use Gohany\Circuitbreaker\Bulkhead\PoolPolicy;
+use Gohany\Circuitbreaker\Bulkhead\RedisPoolBulkhead;
+use Gohany\Circuitbreaker\Resilience\BulkheadMiddleware;
+use Gohany\Circuitbreaker\Resilience\CircuitBreakerConfig;
+use Gohany\Circuitbreaker\Resilience\CircuitBreakerMiddleware;
+use Gohany\Circuitbreaker\Resilience\InMemoryCircuitBreaker;
+use Gohany\Circuitbreaker\Resilience\ResiliencePipeline;
+use Gohany\Circuitbreaker\Resilience\RetryConfig;
+use Gohany\Circuitbreaker\Resilience\RetryMiddleware;
+use Gohany\Circuitbreaker\Resilience\RtryRetryMiddleware;
+use Gohany\Rtry\Impl\RtryPolicyFactory;
 use Symfony\Component\Config\FileLocator;
-use Symfony\Component\DependencyInjection\Alias;
-use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
-use Symfony\Component\DependencyInjection\ChildDefinition;
+use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -38,212 +30,166 @@ final class GohanyCircuitBreakerExtension extends Extension
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
 
-        $redisClientService = $config['redis']['client_service'] ?? null;
-        $hasRedis = is_string($redisClientService) && $redisClientService !== '';
+        $profileEnv = $config['profile_env_var'] ?? 'GOHANY_CB_PROFILE';
+        $defaultProfile = $config['default_profile'] ?? 'default';
+        $active = (string) ($container->getParameterBag()->resolveValue('%env(' . $profileEnv . ')%') ?? '');
+        $active = $active !== '' ? $active : $defaultProfile;
 
-        if ($hasRedis) {
-            // Core infra services (redis-backed)
-            $container->register('Gohany.circuitbreaker.redis_key_builder', RedisKeyBuilder::class)
-                ->setArguments([
-                    $config['redis']['key_prefix'],
-                    (bool) $config['redis']['use_human_readable_keys'],
-                ]);
-
-            // Alias RedisClientInterface to user's service
-            $container->setAlias(RedisClientInterface::class, new Alias($redisClientService, false));
-
-            $container->register('Gohany.circuitbreaker.state_store.redis', RedisCircuitStateStore::class)
-                ->setArguments([
-                    new Reference(RedisClientInterface::class),
-                    new Reference('Gohany.circuitbreaker.redis_key_builder'),
-                    (int) $config['redis']['state_default_ttl_ms'],
-                ]);
-
-            $container->register('Gohany.circuitbreaker.history_store.redis', RedisCircuitHistoryStore::class)
-                ->setArguments([
-                    new Reference(RedisClientInterface::class),
-                    new Reference('Gohany.circuitbreaker.redis_key_builder'),
-                    (int) $config['redis']['bucket_ttl_seconds'],
-                    (int) $config['redis']['counters_ttl_seconds'],
-                ]);
-
-            $container->register('Gohany.circuitbreaker.probe_gate.redis', RedisProbeGate::class)
-                ->setArguments([
-                    new Reference(RedisClientInterface::class),
-                    new Reference('Gohany.circuitbreaker.redis_key_builder'),
-                    (int) $config['redis']['state_default_ttl_ms'],
-                ]);
-
-            // Overrides (optional wiring; override deciders are tagged)
-            $container->register('Gohany.circuitbreaker.override_store.redis', RedisOverrideStore::class)
-                ->setArguments([
-                    new Reference(RedisClientInterface::class),
-                    new Reference('Gohany.circuitbreaker.redis_key_builder'),
-                ]);
-
-            $container->register('Gohany.circuitbreaker.override_decider.redis', RedisOverrideDecider::class)
-                ->setArguments([
-                    new Reference('Gohany.circuitbreaker.override_store.redis'),
-                    new Reference('Gohany.circuitbreaker.clock.system'),
-                ])
-                ->addTag('Gohany.circuitbreaker.override_decider');
-
-            $container->register('Gohany.circuitbreaker.override_admin.redis', RedisOverrideAdmin::class)
-                ->setArguments([
-                    new Reference('Gohany.circuitbreaker.override_store.redis'),
-                    new Reference('Gohany.circuitbreaker.clock.system'),
-                ]);
-
-            $container->register('Gohany.circuitbreaker.circuit_admin.redis', RedisCircuitAdmin::class)
-                ->setArguments([
-                    new Reference(RedisClientInterface::class),
-                    new Reference('Gohany.circuitbreaker.redis_key_builder'),
-                    new Reference('Gohany.circuitbreaker.override_store.redis'),
-                    new Reference('Gohany.circuitbreaker.state_store.redis'),
-                    new Reference('Gohany.circuitbreaker.clock.system'),
-                ]);
+        $profiles = $config['profiles'] ?? [];
+        if (!isset($profiles[$active])) {
+            // If active profile missing, fall back to default_profile
+            $active = $defaultProfile;
         }
+        $p = $profiles[$active] ?? ['pools' => [], 'pipelines' => [], 'doctrine' => ['enabled' => false]];
 
-        // Default Clock (PSR-20)
-        $container->register('Gohany.circuitbreaker.clock.system', SystemClock::class)
-            ->setArguments(['UTC']);
+        $container->setParameter('gohany_circuitbreaker.active_profile', $active);
+        $container->setParameter('gohany_circuitbreaker.key_prefix', $config['key_prefix']);
 
-        // Build default circuit breaker + named circuits
-        $circuits = [];
-        $resolved = [];
-
-        $default = $this->registerCircuitBreaker(
-            $container,
-            'default',
-            $config['default'],
-            $hasRedis
-        );
-        $circuits['default'] = $default['service_id'];
-        $resolved['default'] = $default['resolved'];
-
-        foreach ($config['circuits'] as $name => $cCfg) {
-            $row = $this->registerCircuitBreaker(
-                $container,
-                (string) $name,
-                $cCfg,
-                $hasRedis
-            );
-            $circuits[$name] = $row['service_id'];
-            $resolved[(string) $name] = $row['resolved'];
-        }
-
-        // Expose resolved wiring for console/debug tooling.
-        $container->setParameter('Gohany.circuitbreaker.resolved_circuits', $resolved);
-
-        // Registry
-        $registryDef = new Definition(CircuitBreakerRegistry::class);
-        $registryDef->setArguments([$this->refsMap($circuits)]);
-        $container->setDefinition('Gohany.circuitbreaker.registry', $registryDef);
-
-        // Alias default
-        if ($circuits['default'] !== 'Gohany.circuitbreaker.default') {
-            $container->setAlias('Gohany.circuitbreaker.default', new Alias($circuits['default'], true));
-        } else {
-            // The default breaker is already registered under the public service ID.
-            $container->getDefinition($circuits['default'])->setPublic(true);
-        }
-
-        $container->setAlias(CircuitBreakerInterface::class, new Alias($circuits['default'], true));
-
-        // Console commands
-        if (class_exists(\Symfony\Component\Console\Command\Command::class)) {
-            $container->register('Gohany.circuitbreaker.command.debug', CircuitBreakerDebugCommand::class)
-                ->setArguments([
-                    '%Gohany.circuitbreaker.resolved_circuits%',
-                ])
-                ->addTag('console.command');
-
-            $container->register('Gohany.circuitbreaker.command.sanity', CircuitBreakerSanityCheckCommand::class)
-                ->setArguments([
-                    new Reference('service_container'),
-                    '%Gohany.circuitbreaker.resolved_circuits%',
-                ])
-                ->addTag('console.command');
-
-            if ($hasRedis) {
-                $container->register('Gohany.circuitbreaker.command.redis_override', RedisOverrideCommand::class)
-                    ->setArguments([
-                        new Reference('Gohany.circuitbreaker.override_admin.redis'),
-                    ])
-                    ->addTag('console.command');
+        // Pools
+        $poolServiceIds = [];
+        foreach (($p['pools'] ?? []) as $poolId => $poolCfg) {
+            $lanes = [];
+            foreach (($poolCfg['lanes'] ?? []) as $laneName => $laneCfg) {
+                if ($poolCfg['mode'] === 'fixed') {
+                    $lanes[$laneName] = LanePolicy::fixed($laneName, (int) ($laneCfg['max_concurrent'] ?? 1));
+                } elseif ($poolCfg['mode'] === 'percent') {
+                    $lanes[$laneName] = LanePolicy::percent($laneName, (float) ($laneCfg['percent'] ?? 0.1));
+                } else {
+                    $lanes[$laneName] = LanePolicy::weight($laneName, (int) ($laneCfg['weight'] ?? 1));
+                }
             }
-        }
-    }
 
-    /**
-     * @param array<string,mixed> $cfg
-     */
-    private function registerCircuitBreaker(ContainerBuilder $container, string $name, array $cfg, bool $hasRedis): array
-    {
-        $id = 'Gohany.circuitbreaker.' . $name;
+            $policy = new PoolPolicy(
+                (string) $poolId,
+                (int) $poolCfg['global_max'],
+                (string) $poolCfg['mode'],
+                (float) $poolCfg['soft_borrow_utilization_threshold'],
+                $lanes
+            );
 
-        $stateStoreId = $cfg['state_store_service'] ?: ($hasRedis ? 'Gohany.circuitbreaker.state_store.redis' : null);
-        $historyStoreId = $cfg['history_store_service'] ?: ($hasRedis ? 'Gohany.circuitbreaker.history_store.redis' : null);
-        $probeGateId = $cfg['probe_gate_service'] ?: ($hasRedis ? 'Gohany.circuitbreaker.probe_gate.redis' : null);
-        $clockId = $cfg['clock_service'] ?: 'Gohany.circuitbreaker.clock.system';
-
-        if ($stateStoreId === null || $historyStoreId === null || $probeGateId === null) {
-            throw new InvalidConfigurationException(sprintf(
-                'Circuit "%s" requires explicit infra store services when Redis is not configured. Please set `state_store_service`, `history_store_service`, and `probe_gate_service` under `%s:`.',
-                $name,
-                $name === 'default' ? 'default' : 'circuits.' . $name
-            ));
+            $def = new Definition(RedisPoolBulkhead::class);
+            $def->setArguments([
+                new Reference($config['redis_client_service']),
+                $policy,
+                '%gohany_circuitbreaker.key_prefix%',
+                new Reference('gohany.circuitbreaker.emitter'),
+            ]);
+            $svcId = 'gohany.circuitbreaker.bulkhead.pool.' . $poolId;
+            $container->setDefinition($svcId, $def);
+            $poolServiceIds[$poolId] = $svcId;
         }
 
-        $overrideTag = $cfg['override_decider_tag'] ?: 'Gohany.circuitbreaker.override_decider';
-        $overrideDeciders = new TaggedIteratorArgument($overrideTag);
+        // A ServiceLocator for pool lookup by id
+        $container->setDefinition('gohany.circuitbreaker.bulkhead_pool_locator', new Definition('Symfony\\Component\\DependencyInjection\\ServiceLocator', [
+            new ServiceLocatorArgument(array_map(function (string $svcId) {
+                return new Reference($svcId);
+            }, $poolServiceIds)),
+        ]));
 
-        $def = new Definition(CircuitBreaker::class);
-        $def->setArguments([
-            new Reference($stateStoreId),
-            new Reference($historyStoreId),
-            new Reference($cfg['policy_service']),
-            new Reference($cfg['classifier_service']),
-            $overrideDeciders,
-            new Reference($cfg['side_effect_dispatcher_service']),
-            new Reference($clockId),
-            new Reference($probeGateId),
-            $cfg['retry_executor_service'] ? new Reference($cfg['retry_executor_service']) : null,
-            $cfg['retry_policy_or_spec'] ?: null,
-        ]);
+        // Circuit breaker default (in-memory). You can replace with a Redis-backed implementation later.
+        if (!$container->hasDefinition('gohany.circuitbreaker.circuit_breaker')) {
+            $cbCfg = new Definition(CircuitBreakerConfig::class);
+            $cbCfg->setPublic(false);
+            $container->setDefinition('gohany.circuitbreaker.circuit_breaker_config', $cbCfg);
 
-        $def->setPublic(false);
-
-        $container->setDefinition($id, $def);
-
-        return [
-            'service_id' => $id,
-            'resolved' => [
-                'breaker_service' => $id,
-                'policy_service' => (string) $cfg['policy_service'],
-                'classifier_service' => (string) $cfg['classifier_service'],
-                'side_effect_dispatcher_service' => (string) $cfg['side_effect_dispatcher_service'],
-                'clock_service' => (string) $clockId,
-                'probe_gate_service' => (string) $probeGateId,
-                'state_store_service' => (string) $stateStoreId,
-                'history_store_service' => (string) $historyStoreId,
-                'override_decider_tag' => (string) $overrideTag,
-                'retry_executor_service' => $cfg['retry_executor_service'] ? (string) $cfg['retry_executor_service'] : null,
-                'retry_policy_or_spec' => $cfg['retry_policy_or_spec'] ?: null,
-            ],
-        ];
-    }
-
-    /**
-     * @param array<string,string> $serviceIds
-     * @return array<string,Reference>
-     */
-    private function refsMap(array $serviceIds): array
-    {
-        $out = [];
-        foreach ($serviceIds as $name => $id) {
-            $out[$name] = new Reference($id);
+            $cb = new Definition(InMemoryCircuitBreaker::class);
+            $cb->setArguments([
+                'default',
+                new Reference('gohany.circuitbreaker.circuit_breaker_config'),
+                new Reference('gohany.circuitbreaker.emitter'),
+            ]);
+            $container->setDefinition('gohany.circuitbreaker.circuit_breaker', $cb);
         }
-        return $out;
+
+        // Pipelines
+        foreach (($p['pipelines'] ?? []) as $name => $pipeCfg) {
+            $stageDefs = [];
+            foreach (($pipeCfg['stages'] ?? []) as $stage) {
+                if ($stage['type'] === 'bulkhead') {
+                    $poolId = (string) ($stage['pool'] ?? '');
+                    $svcId = $poolServiceIds[$poolId] ?? null;
+                    if ($svcId === null) {
+                        throw new \InvalidArgumentException('Unknown bulkhead pool id: ' . $poolId);
+                    }
+                    $stageDefs[] = new Definition(BulkheadMiddleware::class, [
+                        new Reference($svcId),
+                        new Reference('gohany.circuitbreaker.emitter'),
+                    ]);
+                } elseif ($stage['type'] === 'circuit_breaker') {
+                    $stageDefs[] = new Definition(CircuitBreakerMiddleware::class, [
+                        new Reference('gohany.circuitbreaker.circuit_breaker'),
+                        new Reference('gohany.circuitbreaker.emitter'),
+                    ]);
+                } elseif ($stage['type'] === 'retry') {
+                    $retry = $stage['retry'] ?? null;
+
+                    // String form: gohany/rtry spec string (e.g. `rtry:attempts=3;delay=50ms`).
+                    if (is_string($retry) && trim($retry) !== '') {
+                        // Fail fast on invalid specs.
+                        (new RtryPolicyFactory())->fromSpec($retry);
+
+                        $stageDefs[] = new Definition(RtryRetryMiddleware::class, [
+                            $retry,
+                            new Reference('gohany.circuitbreaker.emitter'),
+                        ]);
+                        continue;
+                    }
+
+                    // Map form: bundle-native exponential backoff settings.
+                    $retry = is_array($retry) ? $retry : [];
+
+                    $rc = new Definition(RetryConfig::class);
+                    $rc->setPublic(false);
+                    $rc->setProperties([
+                        'maxAttempts' => (int) ($retry['max_attempts'] ?? 3),
+                        'baseDelayMs' => (int) ($retry['base_delay_ms'] ?? 50),
+                        'maxDelayMs' => (int) ($retry['max_delay_ms'] ?? 1000),
+                        'jitter' => (bool) ($retry['jitter'] ?? true),
+                    ]);
+                    $stageDefs[] = new Definition(RetryMiddleware::class, [
+                        $rc,
+                        new Reference('gohany.circuitbreaker.emitter'),
+                    ]);
+                }
+            }
+
+            $pipelineDef = new Definition(ResiliencePipeline::class, [$stageDefs]);
+            $pipelineSvcId = 'gohany.circuitbreaker.pipeline.' . $name;
+            $container->setDefinition($pipelineSvcId, $pipelineDef);
+        }
+
+        // Minimal default emitter (decorate/replace in app)
+        if (!$container->hasDefinition('gohany.circuitbreaker.emitter')) {
+            $container->register('gohany.circuitbreaker.emitter', \Gohany\CircuitBreaker\Observability\NullEmitter::class);
+        }
+
+        // Doctrine DBAL middleware wiring (optional)
+        if (($p['doctrine']['enabled'] ?? false) === true) {
+            $container->setParameter('gohany_circuitbreaker.doctrine.connection', $p['doctrine']['connection']);
+            $container->setParameter('gohany_circuitbreaker.doctrine.connect_pipeline', $p['doctrine']['connect_pipeline']);
+            $container->setParameter('gohany_circuitbreaker.doctrine.query_pipeline', $p['doctrine']['query_pipeline']);
+            $container->setParameter('gohany_circuitbreaker.doctrine.connect_lane', $p['doctrine']['connect_lane']);
+            $container->setParameter('gohany_circuitbreaker.doctrine.query_lane', $p['doctrine']['query_lane']);
+
+            $mw = new Definition(\Gohany\CircuitBreakerSymfonyBundle\Doctrine\ResilientDbalMiddleware::class);
+            $mw->setArguments([
+                new Reference('service_container'),
+                new Reference('gohany.circuitbreaker.emitter'),
+                '%gohany_circuitbreaker.doctrine.connect_pipeline%',
+                '%gohany_circuitbreaker.doctrine.query_pipeline%',
+                '%gohany_circuitbreaker.doctrine.connect_lane%',
+                '%gohany_circuitbreaker.doctrine.query_lane%',
+            ]);
+            $mw->addTag('doctrine.dbal.middleware');
+            $container->setDefinition('gohany.circuitbreaker.doctrine.dbal_middleware', $mw);
+        }
+
+        // Optional Symfony HttpKernel integration: bulkhead around controllers when #[Bulkhead] is present.
+        if (class_exists('Symfony\\Component\\HttpKernel\\KernelEvents')) {
+            $container->setDefinition('gohany.circuitbreaker.http.bulkhead_controller_subscriber', new Definition(
+                \Gohany\CircuitBreakerSymfonyBundle\Http\EventSubscriber\BulkheadControllerSubscriber::class,
+                [new Reference('gohany.circuitbreaker.bulkhead_pool_locator')]
+            ))->addTag('kernel.event_subscriber');
+        }
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace Gohany\Circuitbreaker\bundle\Http;
+namespace Gohany\CircuitBreakerSymfonyBundle\Http;
 
 use Gohany\Circuitbreaker\Core\CircuitBreakerInterface;
 use Gohany\Circuitbreaker\Defaults\Http\CircuitBreakingPsr18Client;

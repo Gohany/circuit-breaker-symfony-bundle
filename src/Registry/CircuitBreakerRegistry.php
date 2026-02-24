@@ -1,6 +1,6 @@
 <?php
 
-namespace Gohany\Circuitbreaker\bundle\Registry;
+namespace Gohany\CircuitBreakerSymfonyBundle\Registry;
 
 use Gohany\Circuitbreaker\Core\CircuitBreakerInterface;
 

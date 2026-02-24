@@ -4,56 +4,95 @@ declare(strict_types=1);
 
 namespace Gohany\Circuitbreaker\bundle\tests;
 
-use Gohany\Circuitbreaker\bundle\DependencyInjection\GohanyCircuitBreakerExtension;
+use Gohany\CircuitBreakerSymfonyBundle\DependencyInjection\GohanyCircuitBreakerExtension;
+use Gohany\Circuitbreaker\Resilience\RtryRetryMiddleware;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 final class GohanyCircuitBreakerExtensionTest extends TestCase
 {
-    public function testLoadWithoutRedisRequiresExplicitStores(): void
+    public function testLoadMinimalConfigSucceeds(): void
     {
-        $this->expectException(InvalidConfigurationException::class);
-
         $container = new ContainerBuilder();
         $ext = new GohanyCircuitBreakerExtension();
 
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
         $ext->load([
             [
-                'default' => [
-                    'policy_service' => 'app.policy',
-                    'classifier_service' => 'app.classifier',
-                    'side_effect_dispatcher_service' => 'app.side_effects',
+                'profiles' => [
+                    'default' => [],
                 ],
             ],
         ], $container);
+
+        $this->assertSame('default', $container->getParameter('gohany_circuitbreaker.active_profile'));
+        $this->assertSame('cb', $container->getParameter('gohany_circuitbreaker.key_prefix'));
+        $this->assertTrue($container->hasDefinition('gohany.circuitbreaker.emitter'));
     }
 
-    public function testLoadWithoutRedisWithExplicitStoresSucceeds(): void
+    public function testRetryStageAcceptsRtrySpecString(): void
     {
         $container = new ContainerBuilder();
         $ext = new GohanyCircuitBreakerExtension();
 
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
         $ext->load([
             [
-                'default' => [
-                    'policy_service' => 'app.policy',
-                    'classifier_service' => 'app.classifier',
-                    'side_effect_dispatcher_service' => 'app.side_effects',
-                    'state_store_service' => 'app.state_store',
-                    'history_store_service' => 'app.history_store',
-                    'probe_gate_service' => 'app.probe_gate',
+                'profiles' => [
+                    'default' => [
+                        'pipelines' => [
+                            'doctrine_connect' => [
+                                'stages' => [
+                                    [
+                                        'type' => 'retry',
+                                        'retry' => 'rtry:a=2;d=25ms;cap=200ms;j=50%',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
             ],
         ], $container);
 
-        $this->assertTrue($container->hasDefinition('Gohany.circuitbreaker.default'));
-        $this->assertTrue($container->hasDefinition('Gohany.circuitbreaker.registry'));
-        $this->assertTrue($container->hasParameter('Gohany.circuitbreaker.resolved_circuits'));
+        $pipeline = $container->getDefinition('gohany.circuitbreaker.pipeline.doctrine_connect');
+        $stageDefs = $pipeline->getArgument(0);
+        $this->assertIsArray($stageDefs);
+        $this->assertCount(1, $stageDefs);
+        $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
+    }
 
-        if (class_exists(\Symfony\Component\Console\Command\Command::class)) {
-            $this->assertTrue($container->hasDefinition('Gohany.circuitbreaker.command.debug'));
-            $this->assertTrue($container->hasDefinition('Gohany.circuitbreaker.command.sanity'));
-        }
+    public function testInvalidRtrySpecStringThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'pipelines' => [
+                            'doctrine_connect' => [
+                                'stages' => [
+                                    [
+                                        'type' => 'retry',
+                                        'retry' => 'rtry:THIS_IS_NOT_VALID',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
     }
 }
