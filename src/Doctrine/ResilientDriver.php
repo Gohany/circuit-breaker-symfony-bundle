@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Gohany\CircuitBreakerSymfonyBundle\Doctrine;
 
 use Doctrine\DBAL\Driver;
+use Doctrine\DBAL\Connection as DbalConnection;
 use Doctrine\DBAL\Driver\Connection;
 use Doctrine\DBAL\Driver\Exception;
 use Doctrine\DBAL\Driver\Result;
 use Doctrine\DBAL\Driver\Statement;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Schema\AbstractSchemaManager;
 use Gohany\CircuitBreaker\Observability\EmitterInterface;
 use Gohany\CircuitBreaker\Resilience\Context;
 use Gohany\CircuitBreaker\Resilience\ResiliencePipeline;
@@ -78,6 +81,11 @@ final class ResilientDriver implements Driver
     public function getDatabasePlatform()
     {
         return $this->driver->getDatabasePlatform();
+    }
+
+    public function getSchemaManager(DbalConnection $conn, AbstractPlatform $platform): AbstractSchemaManager
+    {
+        return $this->driver->getSchemaManager($conn, $platform);
     }
 
     public function getExceptionConverter(): Driver\API\ExceptionConverter
