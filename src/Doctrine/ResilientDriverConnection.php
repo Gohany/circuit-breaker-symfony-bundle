@@ -7,6 +7,7 @@ namespace Gohany\CircuitBreakerSymfonyBundle\Doctrine;
 use Doctrine\DBAL\Driver\Connection;
 use Doctrine\DBAL\Driver\Result;
 use Doctrine\DBAL\Driver\Statement;
+use Doctrine\DBAL\ParameterType;
 use Gohany\CircuitBreaker\Observability\EmitterInterface;
 use Gohany\CircuitBreaker\Resilience\Context;
 use Gohany\CircuitBreaker\Resilience\ResiliencePipeline;
@@ -50,6 +51,11 @@ final class ResilientDriverConnection implements Connection
         return $this->runQueryPipeline('db.query', $sql, function () use ($sql): Result {
             return $this->conn->query($sql);
         });
+    }
+
+    public function quote($value, $type = ParameterType::STRING)
+    {
+        return $this->conn->quote($value, $type);
     }
 
     public function exec(string $sql): int
