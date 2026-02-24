@@ -20,6 +20,12 @@
       "Gohany\\CircuitBreakerSymfonyBundle\\": "src/"
     }
   },
+  "scripts": {
+    "test": "vendor/bin/phpunit -c phpunit.xml.dist",
+    "test:unit": "vendor/bin/phpunit -c phpunit.xml.dist",
+    "test:integration": "vendor/bin/phpunit -c phpunit.integration.xml.dist",
+    "test:coverage": "mkdir -p build/logs && vendor/bin/phpunit -c phpunit.xml.dist --coverage-clover build/logs/clover.xml"
+  },
   "minimum-stability": "stable",
   "prefer-stable": true,
   "extra": {

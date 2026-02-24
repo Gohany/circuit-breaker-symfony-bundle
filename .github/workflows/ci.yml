@@ -41,7 +41,7 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Run PHPUnit
-        run: vendor/bin/phpunit
+        run: composer test
 
   coverage:
     name: Coverage (Codecov)
@@ -83,9 +83,7 @@ jobs:
       - name: Generate coverage
         env:
           XDEBUG_MODE: coverage
-        run: |
-          mkdir -p build/logs
-          vendor/bin/phpunit --coverage-clover build/logs/clover.xml
+        run: composer test:coverage
 
       - name: Verify coverage file exists
         run: |
