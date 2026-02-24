@@ -1,3 +1,5 @@
+![CI](https://github.com/Gohany/circuit-breaker-symfony-bundle/actions/workflows/ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/Gohany/circuit-breaker-symfony-bundle/branch/main/graph/badge.svg)](https://codecov.io/gh/Gohany/circuitbreaker)
 # Gohany CircuitBreaker Symfony Bundle
 
 This bundle wires `gohany/circuitbreaker` into Symfony, with first-class support for:

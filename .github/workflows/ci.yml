@@ -11,7 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        php: ['7.4', '8.0', '8.1', '8.2', '8.3']
+        # PHPUnit 9.x does not support PHP 8.3+
+        php: ['7.4', '8.0', '8.1', '8.2']
 
     steps:
       - name: Checkout
@@ -52,9 +53,10 @@ jobs:
       - name: Setup PHP (with coverage)
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.2'
           tools: composer:v2
-          coverage: pcov
+          # Xdebug is the most reliable coverage driver for PHPUnit on GitHub Actions.
+          coverage: xdebug
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -72,12 +74,20 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Generate coverage
-        run: vendor/bin/phpunit --coverage-clover coverage.xml
+        run: |
+          mkdir -p build/logs
+          vendor/bin/phpunit --coverage-clover build/logs/clover.xml
+
+      - name: Verify coverage file exists
+        run: |
+          ls -la build/logs
+          test -f build/logs/clover.xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: coverage.xml
+          files: build/logs/clover.xml
           fail_ci_if_error: true
+          verbose: true
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
