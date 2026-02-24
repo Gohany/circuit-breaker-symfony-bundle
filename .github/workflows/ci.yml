@@ -55,12 +55,8 @@ jobs:
         with:
           php-version: '8.2'
           tools: composer:v2
-          coverage: xdebug
-
-      - name: Verify coverage driver
-        run: |
-          php -v
-          php -m | grep -i xdebug
+          # Use PCOV for coverage (lighter/faster than Xdebug)
+          coverage: pcov
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -78,9 +74,7 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Generate coverage
-        run: |
-          mkdir -p build/logs
-          php -d xdebug.mode=coverage vendor/bin/phpunit -c phpunit.xml.dist --coverage-clover build/logs/clover.xml
+        run: composer test:coverage
 
       - name: Verify coverage file exists
         run: |
