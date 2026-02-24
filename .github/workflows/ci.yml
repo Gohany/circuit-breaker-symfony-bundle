@@ -57,6 +57,13 @@ jobs:
           tools: composer:v2
           # Xdebug is the most reliable coverage driver for PHPUnit on GitHub Actions.
           coverage: xdebug
+          ini-values: xdebug.mode=coverage
+
+      - name: Verify Xdebug is loaded
+        run: |
+          php -v
+          php -m | grep -i xdebug
+          php -i | grep -i "xdebug.mode" || true
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -74,6 +81,8 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Generate coverage
+        env:
+          XDEBUG_MODE: coverage
         run: |
           mkdir -p build/logs
           vendor/bin/phpunit --coverage-clover build/logs/clover.xml
