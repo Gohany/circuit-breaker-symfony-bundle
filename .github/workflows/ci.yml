@@ -50,20 +50,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup PHP (with coverage)
+      - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
           tools: composer:v2
-          # Xdebug is the most reliable coverage driver for PHPUnit on GitHub Actions.
           coverage: xdebug
-          ini-values: xdebug.mode=coverage
 
-      - name: Verify Xdebug is loaded
+      - name: Verify coverage driver
         run: |
           php -v
           php -m | grep -i xdebug
-          php -i | grep -i "xdebug.mode" || true
 
       - name: Get Composer cache directory
         id: composer-cache
@@ -81,9 +78,9 @@ jobs:
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Generate coverage
-        env:
-          XDEBUG_MODE: coverage
-        run: composer test:coverage
+        run: |
+          mkdir -p build/logs
+          php -d xdebug.mode=coverage vendor/bin/phpunit -c phpunit.xml.dist --coverage-clover build/logs/clover.xml
 
       - name: Verify coverage file exists
         run: |
@@ -96,5 +93,4 @@ jobs:
           files: build/logs/clover.xml
           fail_ci_if_error: true
           verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}
