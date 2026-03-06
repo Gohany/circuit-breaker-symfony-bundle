@@ -128,6 +128,51 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertSame('readonly', $readonlyTags[0]['connection'] ?? null);
     }
 
+    public function testDoctrineAppliesPerConnectionSettingsOverrides(): void
+    {
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'doctrine' => [
+                            'enabled' => true,
+                            'connections' => ['default', 'read'],
+                            'connect_pipeline' => 'db_connect',
+                            'query_pipeline' => 'db_query',
+                            'connect_lane' => 'db.connect.default',
+                            'query_lane' => 'db.query.default',
+                            'connection_settings' => [
+                                'read' => [
+                                    'connect_lane' => 'db.connect.read',
+                                    'query_lane' => 'db.query.read',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $defaultArgs = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default')->getArguments();
+        $readArgs = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.read')->getArguments();
+
+        $this->assertSame('db_connect', $defaultArgs[2]);
+        $this->assertSame('db_query', $defaultArgs[3]);
+        $this->assertSame('db.connect.default', $defaultArgs[4]);
+        $this->assertSame('db.query.default', $defaultArgs[5]);
+
+        $this->assertSame('db_connect', $readArgs[2]);
+        $this->assertSame('db_query', $readArgs[3]);
+        $this->assertSame('db.connect.read', $readArgs[4]);
+        $this->assertSame('db.query.read', $readArgs[5]);
+    }
+
     public function testDoctrineLegacyConnectionConfigIsStillSupported(): void
     {
         $container = new ContainerBuilder();

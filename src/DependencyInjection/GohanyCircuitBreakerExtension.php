@@ -180,6 +180,15 @@ final class GohanyCircuitBreakerExtension extends Extension
                 ? array_values($configuredConnections)
                 : ($legacyConnection !== null ? [(string) $legacyConnection] : ['default']);
 
+            $doctrineDefaults = [
+                'connect_pipeline' => $p['doctrine']['connect_pipeline'],
+                'query_pipeline' => $p['doctrine']['query_pipeline'],
+                'connect_lane' => $p['doctrine']['connect_lane'],
+                'query_lane' => $p['doctrine']['query_lane'],
+            ];
+
+            $connectionSettings = $p['doctrine']['connection_settings'] ?? [];
+
             $container->setParameter('gohany_circuitbreaker.doctrine.connection', $connections[0]);
             $container->setParameter('gohany_circuitbreaker.doctrine.connections', $connections);
             $container->setParameter('gohany_circuitbreaker.doctrine.connect_pipeline', $p['doctrine']['connect_pipeline']);
@@ -188,7 +197,23 @@ final class GohanyCircuitBreakerExtension extends Extension
             $container->setParameter('gohany_circuitbreaker.doctrine.query_lane', $p['doctrine']['query_lane']);
 
             foreach ($connections as $connectionName) {
-                $this->registerDoctrineMiddlewareForConnection($container, (string) $connectionName);
+                $overrides = $connectionSettings[$connectionName] ?? [];
+                $connectionConfig = array_filter(
+                    is_array($overrides) ? $overrides : [],
+                    static function ($value): bool {
+                        return $value !== null;
+                    }
+                );
+                $resolved = array_merge($doctrineDefaults, $connectionConfig);
+
+                $this->registerDoctrineMiddlewareForConnection(
+                    $container,
+                    (string) $connectionName,
+                    $resolved['connect_pipeline'],
+                    $resolved['query_pipeline'],
+                    $resolved['connect_lane'],
+                    $resolved['query_lane']
+                );
             }
         }
 
@@ -201,16 +226,22 @@ final class GohanyCircuitBreakerExtension extends Extension
         }
     }
 
-    private function registerDoctrineMiddlewareForConnection(ContainerBuilder $container, string $connectionName): void
-    {
+    private function registerDoctrineMiddlewareForConnection(
+        ContainerBuilder $container,
+        string $connectionName,
+        ?string $connectPipeline,
+        ?string $queryPipeline,
+        ?string $connectLane,
+        ?string $queryLane
+    ): void {
         $mw = new Definition(\Gohany\CircuitBreakerSymfonyBundle\Doctrine\ResilientDbalMiddleware::class);
         $mw->setArguments([
             new Reference('service_container'),
             new Reference('gohany.circuitbreaker.emitter'),
-            '%gohany_circuitbreaker.doctrine.connect_pipeline%',
-            '%gohany_circuitbreaker.doctrine.query_pipeline%',
-            '%gohany_circuitbreaker.doctrine.connect_lane%',
-            '%gohany_circuitbreaker.doctrine.query_lane%',
+            $connectPipeline,
+            $queryPipeline,
+            $connectLane,
+            $queryLane,
         ]);
         $mw->addTag('doctrine.dbal.middleware', ['connection' => $connectionName]);
 
