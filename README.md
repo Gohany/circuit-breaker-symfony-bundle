@@ -79,7 +79,7 @@ gohany_circuitbreaker:
 
       doctrine:
         enabled: true
-        connection: default
+        connections: [default]
         connect_pipeline: doctrine_connect
         connect_lane: db.connect
 ```
@@ -153,11 +153,14 @@ gohany_circuitbreaker:
 
       doctrine:
         enabled: true
-        connection: default
+        connections: [default]
         connect_pipeline: doctrine_connect
         query_pipeline: doctrine_query_observe
         connect_lane: db.connect
         query_lane: db.query
+
+# Legacy note: `connection: default` is still accepted for backward compatibility,
+# but `connections: [default, ...]` is preferred.
 ```
 
 ### Different profile, same pool id (shared capacity)

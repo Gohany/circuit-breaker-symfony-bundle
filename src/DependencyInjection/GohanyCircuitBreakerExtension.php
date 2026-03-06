@@ -165,23 +165,31 @@ final class GohanyCircuitBreakerExtension extends Extension
 
         // Doctrine DBAL middleware wiring (optional)
         if (($p['doctrine']['enabled'] ?? false) === true) {
-            $container->setParameter('gohany_circuitbreaker.doctrine.connection', $p['doctrine']['connection']);
+            $configuredConnections = $p['doctrine']['connections'] ?? [];
+            $legacyConnection = $p['doctrine']['connection'] ?? null;
+
+            if ($configuredConnections !== [] && $legacyConnection !== null && function_exists('trigger_deprecation')) {
+                trigger_deprecation(
+                    'gohany/circuitbreaker-symfony-bundle',
+                    '1.2',
+                    'Config option "gohany_circuitbreaker.profiles.<profile>.doctrine.connection" is deprecated, use "connections" instead.'
+                );
+            }
+
+            $connections = $configuredConnections !== []
+                ? array_values($configuredConnections)
+                : ($legacyConnection !== null ? [(string) $legacyConnection] : ['default']);
+
+            $container->setParameter('gohany_circuitbreaker.doctrine.connection', $connections[0]);
+            $container->setParameter('gohany_circuitbreaker.doctrine.connections', $connections);
             $container->setParameter('gohany_circuitbreaker.doctrine.connect_pipeline', $p['doctrine']['connect_pipeline']);
             $container->setParameter('gohany_circuitbreaker.doctrine.query_pipeline', $p['doctrine']['query_pipeline']);
             $container->setParameter('gohany_circuitbreaker.doctrine.connect_lane', $p['doctrine']['connect_lane']);
             $container->setParameter('gohany_circuitbreaker.doctrine.query_lane', $p['doctrine']['query_lane']);
 
-            $mw = new Definition(\Gohany\CircuitBreakerSymfonyBundle\Doctrine\ResilientDbalMiddleware::class);
-            $mw->setArguments([
-                new Reference('service_container'),
-                new Reference('gohany.circuitbreaker.emitter'),
-                '%gohany_circuitbreaker.doctrine.connect_pipeline%',
-                '%gohany_circuitbreaker.doctrine.query_pipeline%',
-                '%gohany_circuitbreaker.doctrine.connect_lane%',
-                '%gohany_circuitbreaker.doctrine.query_lane%',
-            ]);
-            $mw->addTag('doctrine.dbal.middleware');
-            $container->setDefinition('gohany.circuitbreaker.doctrine.dbal_middleware', $mw);
+            foreach ($connections as $connectionName) {
+                $this->registerDoctrineMiddlewareForConnection($container, (string) $connectionName);
+            }
         }
 
         // Optional Symfony HttpKernel integration: bulkhead around controllers when #[Bulkhead] is present.
@@ -191,5 +199,22 @@ final class GohanyCircuitBreakerExtension extends Extension
                 [new Reference('gohany.circuitbreaker.bulkhead_pool_locator')]
             ))->addTag('kernel.event_subscriber');
         }
+    }
+
+    private function registerDoctrineMiddlewareForConnection(ContainerBuilder $container, string $connectionName): void
+    {
+        $mw = new Definition(\Gohany\CircuitBreakerSymfonyBundle\Doctrine\ResilientDbalMiddleware::class);
+        $mw->setArguments([
+            new Reference('service_container'),
+            new Reference('gohany.circuitbreaker.emitter'),
+            '%gohany_circuitbreaker.doctrine.connect_pipeline%',
+            '%gohany_circuitbreaker.doctrine.query_pipeline%',
+            '%gohany_circuitbreaker.doctrine.connect_lane%',
+            '%gohany_circuitbreaker.doctrine.query_lane%',
+        ]);
+        $mw->addTag('doctrine.dbal.middleware', ['connection' => $connectionName]);
+
+        $serviceId = sprintf('gohany.circuitbreaker.doctrine.dbal_middleware.%s', $connectionName);
+        $container->setDefinition($serviceId, $mw);
     }
 }
