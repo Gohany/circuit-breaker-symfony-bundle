@@ -9,8 +9,6 @@ use Doctrine\DBAL\Driver\Result;
 use Doctrine\DBAL\Driver\Statement;
 use Doctrine\DBAL\ParameterType;
 use Gohany\CircuitBreaker\Observability\EmitterInterface;
-use Gohany\CircuitBreaker\Resilience\Context;
-use Gohany\CircuitBreaker\Resilience\ResiliencePipeline;
 use Psr\Container\ContainerInterface;
 
 final class ResilientDriverConnection implements Connection
@@ -21,29 +19,25 @@ final class ResilientDriverConnection implements Connection
     private $container;
     /** @var EmitterInterface */
     private $emitter;
-    /** @var string|null */
-    private $queryPipeline;
-    /** @var string */
-    private $queryLane;
+    /** @var DoctrineLaneResolverInterface */
+    private $laneResolver;
 
     public function __construct(
         Connection $conn,
         ContainerInterface $container,
         EmitterInterface $emitter,
-        ?string $queryPipeline,
-        string $queryLane
+        DoctrineLaneResolverInterface $laneResolver
     ) {
         $this->conn = $conn;
         $this->container = $container;
         $this->emitter = $emitter;
-        $this->queryPipeline = $queryPipeline;
-        $this->queryLane = $queryLane;
+        $this->laneResolver = $laneResolver;
     }
 
     public function prepare(string $sql): Statement
     {
         $stmt = $this->conn->prepare($sql);
-        return new ResilientDriverStatement($stmt, $this->container, $this->emitter, $this->queryPipeline, $this->queryLane, $sql);
+        return new ResilientDriverStatement($stmt, $this->container, $this->emitter, $this->laneResolver, $sql);
     }
 
     public function query(string $sql): Result
@@ -97,16 +91,15 @@ final class ResilientDriverConnection implements Connection
      */
     private function runQueryPipeline(string $op, string $sql, callable $fn)
     {
-        if (!$this->queryPipeline) {
-            return $fn();
-        }
+        $laneContext = $this->laneResolver->resolveQueryLaneContext($sql);
+        $executor = new DoctrineLaneExecutor($this->container);
 
-        /** @var ResiliencePipeline $pipe */
-        $pipe = $this->container->get('gohany.circuitbreaker.pipeline.' . $this->queryPipeline);
-        $ctx = new Context($op, $this->queryLane);
-        $ctx->set('dbal.sql', $this->shortSql($sql));
-
-        return $pipe->execute($ctx, $fn);
+        return $executor->execute(
+            $laneContext,
+            $op,
+            $fn,
+            ['dbal.sql' => $this->shortSql($sql)]
+        );
     }
 
     private function shortSql(string $sql): string

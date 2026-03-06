@@ -7,8 +7,6 @@ namespace Gohany\CircuitBreakerSymfonyBundle\Doctrine;
 use Doctrine\DBAL\Driver\Result;
 use Doctrine\DBAL\Driver\Statement;
 use Gohany\CircuitBreaker\Observability\EmitterInterface;
-use Gohany\CircuitBreaker\Resilience\Context;
-use Gohany\CircuitBreaker\Resilience\ResiliencePipeline;
 use Psr\Container\ContainerInterface;
 
 final class ResilientDriverStatement implements Statement
@@ -19,10 +17,8 @@ final class ResilientDriverStatement implements Statement
     private $container;
     /** @var EmitterInterface */
     private $emitter;
-    /** @var string|null */
-    private $queryPipeline;
-    /** @var string */
-    private $queryLane;
+    /** @var DoctrineLaneResolverInterface */
+    private $laneResolver;
     /** @var string */
     private $sql;
 
@@ -30,15 +26,13 @@ final class ResilientDriverStatement implements Statement
         Statement $stmt,
         ContainerInterface $container,
         EmitterInterface $emitter,
-        ?string $queryPipeline,
-        string $queryLane,
+        DoctrineLaneResolverInterface $laneResolver,
         string $sql
     ) {
         $this->stmt = $stmt;
         $this->container = $container;
         $this->emitter = $emitter;
-        $this->queryPipeline = $queryPipeline;
-        $this->queryLane = $queryLane;
+        $this->laneResolver = $laneResolver;
         $this->sql = $sql;
     }
 
@@ -54,18 +48,17 @@ final class ResilientDriverStatement implements Statement
 
     public function execute($params = null): Result
     {
-        if (!$this->queryPipeline) {
-            return $this->stmt->execute($params);
-        }
+        $laneContext = $this->laneResolver->resolveQueryLaneContext($this->sql);
+        $executor = new DoctrineLaneExecutor($this->container);
 
-        /** @var ResiliencePipeline $pipe */
-        $pipe = $this->container->get('gohany.circuitbreaker.pipeline.' . $this->queryPipeline);
-        $ctx = new Context('db.execute', $this->queryLane);
-        $ctx->set('dbal.sql', $this->shortSql($this->sql));
-
-        return $pipe->execute($ctx, function () use ($params): Result {
+        return $executor->execute(
+            $laneContext,
+            'db.execute',
+            function () use ($params): Result {
             return $this->stmt->execute($params);
-        });
+            },
+            ['dbal.sql' => $this->shortSql($this->sql)]
+        );
     }
 
     public function rowCount(): int

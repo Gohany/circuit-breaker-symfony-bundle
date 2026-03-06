@@ -24,29 +24,17 @@ final class ResilientDbalMiddleware implements Middleware
     private $container;
     /** @var EmitterInterface */
     private $emitter;
-    /** @var string|null */
-    private $connectPipeline;
-    /** @var string|null */
-    private $queryPipeline;
-    /** @var string */
-    private $connectLane;
-    /** @var string */
-    private $queryLane;
+    /** @var DoctrineLaneResolverInterface */
+    private $laneResolver;
 
     public function __construct(
         ContainerInterface $container,
         EmitterInterface $emitter,
-        ?string $connectPipeline,
-        ?string $queryPipeline,
-        string $connectLane,
-        string $queryLane
+        DoctrineLaneResolverInterface $laneResolver
     ) {
         $this->container = $container;
         $this->emitter = $emitter;
-        $this->connectPipeline = $connectPipeline;
-        $this->queryPipeline = $queryPipeline;
-        $this->connectLane = $connectLane;
-        $this->queryLane = $queryLane;
+        $this->laneResolver = $laneResolver;
     }
 
     public function wrap(Driver $driver): Driver
@@ -55,10 +43,7 @@ final class ResilientDbalMiddleware implements Middleware
             $driver,
             $this->container,
             $this->emitter,
-            $this->connectPipeline,
-            $this->queryPipeline,
-            $this->connectLane,
-            $this->queryLane
+            $this->laneResolver
         );
     }
 }

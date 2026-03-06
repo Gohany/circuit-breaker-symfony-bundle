@@ -204,6 +204,42 @@ This matches the pattern:
 
 > block connecting, but once connected do not attempt to block; failed queries contribute to circuit state
 
+### Doctrine composed lanes (parent share + child priority)
+
+Doctrine DBAL middleware can compose multiple acquisitions per action:
+
+- **primary lane** (existing behavior, from `connect_*` / `query_*`)
+- optional **routing lanes** (extra parent/child acquisitions resolved from route/path patterns)
+
+```yaml
+gohany_circuitbreaker:
+  profiles:
+    default:
+      doctrine:
+        enabled: true
+        connections: ['default']
+
+        connect_pipeline: 'db_connect'
+        query_pipeline: 'db_query'
+        connect_lane: 'db.connect.default'
+        query_lane: 'db.query.default'
+
+        routing_lanes:
+          parent_pipeline: 'db_query'
+          parent_lane_map:
+            '^hydra_': 'hydra'
+          child_pipeline: 'db_query'
+          child_lane_map:
+            '^hydra_charges_': 'hydra.charges'
+            '^hydra_': 'hydra.misc'
+```
+
+Notes:
+
+- If `routing_lanes` is not configured, behavior is unchanged.
+- If `request_stack` is unavailable (CLI/worker), routing lanes are skipped and only the primary lane is used.
+- Acquisitions are applied in order: primary, then extra lanes.
+
 ## Common implementation recipes
 
 ### 1) “Protect the DB from connection storms” (connect-gate)

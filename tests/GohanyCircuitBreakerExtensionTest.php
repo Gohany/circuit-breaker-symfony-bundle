@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Gohany\Circuitbreaker\bundle\tests;
 
 use Gohany\CircuitBreakerSymfonyBundle\DependencyInjection\GohanyCircuitBreakerExtension;
+use Symfony\Component\DependencyInjection\Reference;
 use Gohany\Circuitbreaker\Resilience\RtryRetryMiddleware;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -159,18 +160,57 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
             ],
         ], $container);
 
-        $defaultArgs = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default')->getArguments();
-        $readArgs = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.read')->getArguments();
+        $defaultResolver = $container->getDefinition('gohany.circuitbreaker.doctrine.lane_resolver.default.default')->getArguments();
+        $readResolver = $container->getDefinition('gohany.circuitbreaker.doctrine.lane_resolver.read.default')->getArguments();
 
-        $this->assertSame('db_connect', $defaultArgs[2]);
-        $this->assertSame('db_query', $defaultArgs[3]);
-        $this->assertSame('db.connect.default', $defaultArgs[4]);
-        $this->assertSame('db.query.default', $defaultArgs[5]);
+        $this->assertSame('db_connect', $defaultResolver[0]);
+        $this->assertSame('db_query', $defaultResolver[1]);
+        $this->assertSame('db.connect.default', $defaultResolver[2]);
+        $this->assertSame('db.query.default', $defaultResolver[3]);
 
-        $this->assertSame('db_connect', $readArgs[2]);
-        $this->assertSame('db_query', $readArgs[3]);
-        $this->assertSame('db.connect.read', $readArgs[4]);
-        $this->assertSame('db.query.read', $readArgs[5]);
+        $this->assertSame('db_connect', $readResolver[0]);
+        $this->assertSame('db_query', $readResolver[1]);
+        $this->assertSame('db.connect.read', $readResolver[2]);
+        $this->assertSame('db.query.read', $readResolver[3]);
+    }
+
+    public function testDoctrineRoutingLanesUseRequestAwareResolverWhenRequestStackIsAvailable(): void
+    {
+        $container = new ContainerBuilder();
+        $container->register('request_stack', 'Symfony\\Component\\HttpFoundation\\RequestStack');
+
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'doctrine' => [
+                            'enabled' => true,
+                            'connections' => ['default'],
+                            'routing_lanes' => [
+                                'parent_pipeline' => 'db_query',
+                                'parent_lane_map' => ['^hydra_' => 'hydra'],
+                                'child_pipeline' => 'db_query',
+                                'child_lane_map' => ['^hydra_charges_' => 'hydra.charges'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $resolverDef = $container->getDefinition('gohany.circuitbreaker.doctrine.lane_resolver.default');
+        $this->assertSame('Gohany\\CircuitBreakerSymfonyBundle\\Doctrine\\RequestAwareDoctrineLaneResolver', $resolverDef->getClass());
+
+        $args = $resolverDef->getArguments();
+        $this->assertInstanceOf(Reference::class, $args[0]);
+        $this->assertSame('gohany.circuitbreaker.doctrine.lane_resolver.default.default', (string) $args[0]);
+        $this->assertSame('db_query', $args[2]);
+        $this->assertSame('db_query', $args[3]);
     }
 
     public function testDoctrineLegacyConnectionConfigIsStillSupported(): void

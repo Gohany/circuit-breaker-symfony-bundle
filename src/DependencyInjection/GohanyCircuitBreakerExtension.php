@@ -15,8 +15,9 @@ use Gohany\Circuitbreaker\Resilience\ResiliencePipeline;
 use Gohany\Circuitbreaker\Resilience\RetryConfig;
 use Gohany\Circuitbreaker\Resilience\RetryMiddleware;
 use Gohany\Circuitbreaker\Resilience\RtryRetryMiddleware;
+use Gohany\CircuitBreakerSymfonyBundle\Doctrine\DefaultDoctrineLaneResolver;
+use Gohany\CircuitBreakerSymfonyBundle\Doctrine\RequestAwareDoctrineLaneResolver;
 use Gohany\Rtry\Impl\RtryPolicyFactory;
-use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
@@ -205,14 +206,21 @@ final class GohanyCircuitBreakerExtension extends Extension
                     }
                 );
                 $resolved = array_merge($doctrineDefaults, $connectionConfig);
+                $laneResolverServiceId = sprintf('gohany.circuitbreaker.doctrine.lane_resolver.%s', $connectionName);
+                $this->registerDoctrineLaneResolverForConnection(
+                    $container,
+                    $laneResolverServiceId,
+                    $resolved['connect_pipeline'],
+                    $resolved['query_pipeline'],
+                    $resolved['connect_lane'],
+                    $resolved['query_lane'],
+                    $p['doctrine']['routing_lanes'] ?? []
+                );
 
                 $this->registerDoctrineMiddlewareForConnection(
                     $container,
                     (string) $connectionName,
-                    $resolved['connect_pipeline'],
-                    $resolved['query_pipeline'],
-                    $resolved['connect_lane'],
-                    $resolved['query_lane']
+                    $laneResolverServiceId
                 );
             }
         }
@@ -229,23 +237,59 @@ final class GohanyCircuitBreakerExtension extends Extension
     private function registerDoctrineMiddlewareForConnection(
         ContainerBuilder $container,
         string $connectionName,
-        ?string $connectPipeline,
-        ?string $queryPipeline,
-        ?string $connectLane,
-        ?string $queryLane
+        string $laneResolverServiceId
     ): void {
         $mw = new Definition(\Gohany\CircuitBreakerSymfonyBundle\Doctrine\ResilientDbalMiddleware::class);
         $mw->setArguments([
             new Reference('service_container'),
             new Reference('gohany.circuitbreaker.emitter'),
-            $connectPipeline,
-            $queryPipeline,
-            $connectLane,
-            $queryLane,
+            new Reference($laneResolverServiceId),
         ]);
         $mw->addTag('doctrine.dbal.middleware', ['connection' => $connectionName]);
 
         $serviceId = sprintf('gohany.circuitbreaker.doctrine.dbal_middleware.%s', $connectionName);
         $container->setDefinition($serviceId, $mw);
+    }
+
+    /**
+     * @param array<string,mixed> $routingLanes
+     */
+    private function registerDoctrineLaneResolverForConnection(
+        ContainerBuilder $container,
+        string $serviceId,
+        ?string $connectPipeline,
+        ?string $queryPipeline,
+        string $connectLane,
+        string $queryLane,
+        array $routingLanes
+    ): void {
+        $baseResolverId = $serviceId . '.default';
+        $baseResolver = new Definition(DefaultDoctrineLaneResolver::class, [
+            $connectPipeline,
+            $queryPipeline,
+            $connectLane,
+            $queryLane,
+        ]);
+        $container->setDefinition($baseResolverId, $baseResolver);
+
+        $parentLaneMap = $routingLanes['parent_lane_map'] ?? [];
+        $childLaneMap = $routingLanes['child_lane_map'] ?? [];
+        $hasRouting = is_array($parentLaneMap) && $parentLaneMap !== []
+            || is_array($childLaneMap) && $childLaneMap !== [];
+
+        if (!$hasRouting || !$container->hasDefinition('request_stack')) {
+            $container->setAlias($serviceId, $baseResolverId);
+            return;
+        }
+
+        $requestResolver = new Definition(RequestAwareDoctrineLaneResolver::class, [
+            new Reference($baseResolverId),
+            new Reference('request_stack'),
+            $routingLanes['parent_pipeline'] ?? null,
+            $routingLanes['child_pipeline'] ?? null,
+            is_array($parentLaneMap) ? $parentLaneMap : [],
+            is_array($childLaneMap) ? $childLaneMap : [],
+        ]);
+        $container->setDefinition($serviceId, $requestResolver);
     }
 }
