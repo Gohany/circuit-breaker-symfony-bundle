@@ -97,6 +97,42 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         ], $container);
     }
 
+    public function testRetryStageAcceptsEnvRtrySpecString(): void
+    {
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'pipelines' => [
+                            'doctrine_connect' => [
+                                'stages' => [
+                                    [
+                                        'type' => 'retry',
+                                        'retry' => '%env(CB_RETRY_SPEC)%',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $pipeline = $container->getDefinition('gohany.circuitbreaker.pipeline.doctrine_connect');
+        $stageDefs = $pipeline->getArgument(0);
+
+        $this->assertIsArray($stageDefs);
+        $this->assertCount(1, $stageDefs);
+        $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
+        $this->assertSame('%env(CB_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
+    }
+
     public function testDoctrineRegistersMiddlewarePerConfiguredConnection(): void
     {
         $container = new ContainerBuilder();

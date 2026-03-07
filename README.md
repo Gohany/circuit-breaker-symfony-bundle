@@ -143,6 +143,8 @@ gohany_circuitbreaker:
             - { type: circuit_breaker }
             # Retry can be configured either as a gohany/rtry spec string (recommended):
             # - { type: retry, retry: 'rtry:a=2;d=25ms;cap=200ms;j=50%' }
+            # ...including env-driven specs:
+            # - { type: retry, retry: '%env(CB_RETRY_SPEC)%' }
             # ...or as a legacy map (backward-compatible; mapped internally to a best-effort `rtry:` spec):
             - { type: retry, retry: { max_attempts: 2, base_delay_ms: 25, max_delay_ms: 200, jitter: true } }
 
