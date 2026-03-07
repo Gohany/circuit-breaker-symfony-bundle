@@ -110,11 +110,13 @@ final class GohanyCircuitBreakerExtension extends Extension
 
                     // String form: gohany/rtry spec string (e.g. `rtry:attempts=3;delay=50ms`).
                     if (is_string($retry) && trim($retry) !== '') {
-                        // Fail fast on invalid literal specs.
-                        // `%env(...)%` placeholders are resolved at runtime and cannot be parsed here.
-                        if (!$this->isEnvPlaceholder($retry)) {
-                            (new RtryPolicyFactory())->fromSpec($retry);
+                        if ($this->isEnvPlaceholder($retry)) {
+                            $retry = (string) $container->resolveEnvPlaceholders($retry, true);
+                            $retry = str_replace('%%', '%', $retry);
                         }
+
+                        // Fail fast on invalid specs (including env-resolved values).
+                        (new RtryPolicyFactory())->fromSpec($retry);
 
                         $stageDefs[] = new Definition(RtryRetryMiddleware::class, [
                             $retry,
