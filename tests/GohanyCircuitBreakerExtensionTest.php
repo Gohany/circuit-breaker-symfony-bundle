@@ -300,6 +300,7 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         ], $container);
 
         $this->assertTrue($container->hasDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default'));
+        $this->assertSame('%env(bool:DOCTRINE_CB_ENABLED)%', $container->getParameter('gohany_circuitbreaker.doctrine.enabled'));
     }
 
     public function testDoctrineAppliesPerConnectionSettingsOverrides(): void

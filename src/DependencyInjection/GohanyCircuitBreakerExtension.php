@@ -154,8 +154,9 @@ final class GohanyCircuitBreakerExtension extends Extension
         }
 
         $doctrineEnabled = $p['doctrine']['enabled'] ?? false;
+        $container->setParameter('gohany_circuitbreaker.doctrine.enabled', $doctrineEnabled);
         if (is_string($doctrineEnabled) && $this->isEnvPlaceholder($doctrineEnabled)) {
-            $doctrineEnabled = (bool) $container->getParameterBag()->resolveValue($doctrineEnabled);
+            $doctrineEnabled = (bool) $container->resolveEnvPlaceholders($doctrineEnabled, true);
         }
 
         // Doctrine DBAL middleware wiring (optional)
