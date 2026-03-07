@@ -354,7 +354,7 @@ final class GohanyCircuitBreakerExtension extends Extension
         $normalized = preg_replace('/%%env\(([^)]+)\)%%/', '%env($1)%', $normalized) ?? $normalized;
 
         if ($this->isEnvPlaceholder($normalized)) {
-            $normalized = (string) $container->resolveEnvPlaceholders($normalized, true);
+            return $normalized;  // Return as-is; resolved at runtime
         }
 
         // Keep `%` in specs parseable when container escaping left doubled percents.

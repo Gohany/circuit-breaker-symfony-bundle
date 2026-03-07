@@ -133,7 +133,7 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertIsArray($stageDefs);
         $this->assertCount(1, $stageDefs);
         $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
-        $this->assertSame('rtry:a=2;d=15ms;cap=80ms', $stageDefs[0]->getArgument(0));
+        $this->assertSame('%env(CB_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
     }
 
     public function testRetryStageAcceptsTypedEnvRtrySpecString(): void
@@ -171,7 +171,7 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertIsArray($stageDefs);
         $this->assertCount(1, $stageDefs);
         $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
-        $this->assertSame('rtry:a=2;d=25ms;cap=200ms;j=20%@pm', $stageDefs[0]->getArgument(0));
+        $this->assertSame('%env(string:HYDRA_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
     }
 
     public function testRetryStageAcceptsEscapedEnvPlaceholderRtrySpecString(): void
@@ -209,7 +209,7 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertIsArray($stageDefs);
         $this->assertCount(1, $stageDefs);
         $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
-        $this->assertSame('rtry:a=5;seq=50,100,200,400,800;j=20%@pm;on=4xx,5xx,NETWORK_ERROR,RATE_LIMITED', $stageDefs[0]->getArgument(0));
+        $this->assertSame('%env(HYDRA_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
     }
 
     public function testPoolPoliciesAreWiredAsDefinitions(): void
