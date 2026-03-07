@@ -18,7 +18,6 @@ use Gohany\Circuitbreaker\Resilience\RtryRetryMiddleware;
 use Gohany\CircuitBreakerSymfonyBundle\Doctrine\DefaultDoctrineLaneResolver;
 use Gohany\CircuitBreakerSymfonyBundle\Doctrine\RequestAwareDoctrineLaneResolver;
 use Gohany\Rtry\Impl\RtryPolicyFactory;
-use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -66,9 +65,9 @@ final class GohanyCircuitBreakerExtension extends Extension
 
         // A ServiceLocator for pool lookup by id
         $container->setDefinition('gohany.circuitbreaker.bulkhead_pool_locator', new Definition('Symfony\\Component\\DependencyInjection\\ServiceLocator', [
-            new ServiceLocatorArgument(array_map(function (string $svcId) {
+            array_map(function (string $svcId) {
                 return new Reference($svcId);
-            }, $poolServiceIds)),
+            }, $poolServiceIds),
         ]));
 
         // Circuit breaker default (in-memory). You can replace with a Redis-backed implementation later.
@@ -110,10 +109,7 @@ final class GohanyCircuitBreakerExtension extends Extension
 
                     // String form: gohany/rtry spec string (e.g. `rtry:attempts=3;delay=50ms`).
                     if (is_string($retry) && trim($retry) !== '') {
-                        if ($this->isEnvPlaceholder($retry)) {
-                            $retry = (string) $container->resolveEnvPlaceholders($retry, true);
-                            $retry = str_replace('%%', '%', $retry);
-                        }
+                        $retry = $this->resolveRetrySpec($container, $retry);
 
                         // Fail fast on invalid specs (including env-resolved values).
                         (new RtryPolicyFactory())->fromSpec($retry);
@@ -343,5 +339,22 @@ final class GohanyCircuitBreakerExtension extends Extension
         // %env(VAR)% or %env(string:VAR)%. Skip eager retry-spec parsing whenever
         // the value contains an env placeholder token.
         return preg_match('/%env\([^)]+\)%/', $trimmed) === 1;
+    }
+
+    private function resolveRetrySpec(ContainerBuilder $container, string $retry): string
+    {
+        $normalized = trim($retry);
+
+        // Some config processing paths can preserve env placeholders as escaped
+        // literals (%%env(...)%%). Normalize only env placeholders back before
+        // resolving so retry jitter escapes (e.g. %% in specs) stay untouched.
+        $normalized = preg_replace('/%%env\(([^)]+)\)%%/', '%env($1)%', $normalized) ?? $normalized;
+
+        if ($this->isEnvPlaceholder($normalized)) {
+            $normalized = (string) $container->resolveEnvPlaceholders($normalized, true);
+        }
+
+        // Keep `%` in specs parseable when container escaping left doubled percents.
+        return str_replace('%%', '%', $normalized);
     }
 }
