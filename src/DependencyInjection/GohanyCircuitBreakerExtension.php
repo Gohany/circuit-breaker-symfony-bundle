@@ -151,8 +151,13 @@ final class GohanyCircuitBreakerExtension extends Extension
             $container->register('gohany.circuitbreaker.emitter', \Gohany\CircuitBreaker\Observability\NullEmitter::class);
         }
 
+        $doctrineEnabled = $p['doctrine']['enabled'] ?? false;
+        if (is_string($doctrineEnabled) && $this->isEnvPlaceholder($doctrineEnabled)) {
+            $doctrineEnabled = (bool) $container->getParameterBag()->resolveValue($doctrineEnabled);
+        }
+
         // Doctrine DBAL middleware wiring (optional)
-        if (($p['doctrine']['enabled'] ?? false) === true) {
+        if ($doctrineEnabled === true) {
             $configuredConnections = $p['doctrine']['connections'] ?? [];
             $legacyConnection = $p['doctrine']['connection'] ?? null;
 
@@ -329,6 +334,11 @@ final class GohanyCircuitBreakerExtension extends Extension
 
     private function isEnvPlaceholder(string $value): bool
     {
-        return preg_match('/^%env\([^)]+\)%$/', trim($value)) === 1;
+        $trimmed = trim($value);
+
+        // Symfony env placeholders may come in several processor forms, e.g.
+        // %env(VAR)% or %env(string:VAR)%. Skip eager retry-spec parsing whenever
+        // the value contains an env placeholder token.
+        return preg_match('/%env\([^)]+\)%/', $trimmed) === 1;
     }
 }

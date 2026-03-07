@@ -70,7 +70,7 @@ final class Configuration implements ConfigurationInterface
                             ->arrayNode('doctrine')
                                 ->addDefaultsIfNotSet()
                                 ->children()
-                                    ->booleanNode('enabled')->defaultFalse()->end()
+                                    ->variableNode('enabled')->defaultFalse()->end()
                                     ->scalarNode('connection')->defaultNull()->end()
                                     ->arrayNode('connections')
                                         ->scalarPrototype()->end()

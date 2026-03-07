@@ -134,6 +134,42 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertSame('%env(CB_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
     }
 
+    public function testRetryStageAcceptsTypedEnvRtrySpecString(): void
+    {
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'pipelines' => [
+                            'doctrine_query' => [
+                                'stages' => [
+                                    [
+                                        'type' => 'retry',
+                                        'retry' => '%env(string:HYDRA_RETRY_SPEC)%',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $pipeline = $container->getDefinition('gohany.circuitbreaker.pipeline.doctrine_query');
+        $stageDefs = $pipeline->getArgument(0);
+
+        $this->assertIsArray($stageDefs);
+        $this->assertCount(1, $stageDefs);
+        $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
+        $this->assertSame('%env(string:HYDRA_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
+    }
+
     public function testPoolPoliciesAreWiredAsDefinitions(): void
     {
         $container = new ContainerBuilder();
@@ -234,6 +270,32 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
 
         $this->assertSame('%gohany_circuitbreaker.bypass_deny_block%', $args[3]);
         $this->assertSame('%env(bool:CB_BYPASS_DENY_BLOCK)%', $container->getParameter('gohany_circuitbreaker.bypass_deny_block'));
+    }
+
+    public function testDoctrineEnabledAcceptsTypedEnvBoolFlag(): void
+    {
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+        $_ENV['DOCTRINE_CB_ENABLED'] = '1';
+        putenv('DOCTRINE_CB_ENABLED=1');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'doctrine' => [
+                            'enabled' => '%env(bool:DOCTRINE_CB_ENABLED)%',
+                            'connections' => ['default'],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $this->assertTrue($container->hasDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default'));
     }
 
     public function testDoctrineAppliesPerConnectionSettingsOverrides(): void
