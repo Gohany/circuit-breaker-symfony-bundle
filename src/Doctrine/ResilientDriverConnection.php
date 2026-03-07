@@ -21,23 +21,27 @@ final class ResilientDriverConnection implements Connection
     private $emitter;
     /** @var DoctrineLaneResolverInterface */
     private $laneResolver;
+    /** @var bool */
+    private $bypassDenyBlock;
 
     public function __construct(
         Connection $conn,
         ContainerInterface $container,
         EmitterInterface $emitter,
-        DoctrineLaneResolverInterface $laneResolver
+        DoctrineLaneResolverInterface $laneResolver,
+        bool $bypassDenyBlock = false
     ) {
         $this->conn = $conn;
         $this->container = $container;
         $this->emitter = $emitter;
         $this->laneResolver = $laneResolver;
+        $this->bypassDenyBlock = $bypassDenyBlock;
     }
 
     public function prepare(string $sql): Statement
     {
         $stmt = $this->conn->prepare($sql);
-        return new ResilientDriverStatement($stmt, $this->container, $this->emitter, $this->laneResolver, $sql);
+        return new ResilientDriverStatement($stmt, $this->container, $this->emitter, $this->laneResolver, $sql, $this->bypassDenyBlock);
     }
 
     public function query(string $sql): Result
@@ -98,7 +102,10 @@ final class ResilientDriverConnection implements Connection
             $laneContext,
             $op,
             $fn,
-            ['dbal.sql' => $this->shortSql($sql)]
+            [
+                'dbal.sql' => $this->shortSql($sql),
+                'cb_bypass_deny_block' => $this->bypassDenyBlock,
+            ]
         );
     }
 

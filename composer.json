@@ -5,7 +5,7 @@
   "license": "proprietary",
   "require": {
     "php": ">=7.4",
-    "gohany/circuitbreaker": "v1.1.0",
+    "gohany/circuitbreaker": "v1.1.1",
     "symfony/framework-bundle": "^5.4 || ^6.0 || ^7.0",
     "symfony/dependency-injection": "^5.4 || ^6.0 || ^7.0",
     "symfony/config": "^5.4 || ^6.0 || ^7.0",

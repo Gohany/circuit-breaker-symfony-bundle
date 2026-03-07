@@ -21,19 +21,23 @@ final class ResilientDriverStatement implements Statement
     private $laneResolver;
     /** @var string */
     private $sql;
+    /** @var bool */
+    private $bypassDenyBlock;
 
     public function __construct(
         Statement $stmt,
         ContainerInterface $container,
         EmitterInterface $emitter,
         DoctrineLaneResolverInterface $laneResolver,
-        string $sql
+        string $sql,
+        bool $bypassDenyBlock = false
     ) {
         $this->stmt = $stmt;
         $this->container = $container;
         $this->emitter = $emitter;
         $this->laneResolver = $laneResolver;
         $this->sql = $sql;
+        $this->bypassDenyBlock = $bypassDenyBlock;
     }
 
     public function bindValue($param, $value, $type = null): bool
@@ -57,7 +61,10 @@ final class ResilientDriverStatement implements Statement
             function () use ($params): Result {
             return $this->stmt->execute($params);
             },
-            ['dbal.sql' => $this->shortSql($this->sql)]
+            [
+                'dbal.sql' => $this->shortSql($this->sql),
+                'cb_bypass_deny_block' => $this->bypassDenyBlock,
+            ]
         );
     }
 

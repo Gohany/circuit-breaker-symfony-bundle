@@ -55,11 +55,35 @@ final class DoctrineLaneExecutorTest extends TestCase
 
         $this->assertSame('done', $result);
         $this->assertCount(5, $recorded);
-        $this->assertSame(['stage' => 'before', 'lane' => 'lane.primary', 'level' => 'primary', 'pipeline' => 'p1', 'operation' => 'db.query', 'sql' => 'SELECT 1'], $recorded[0]);
-        $this->assertSame(['stage' => 'before', 'lane' => 'lane.extra', 'level' => 'extra', 'pipeline' => 'p2', 'operation' => 'db.query', 'sql' => 'SELECT 1'], $recorded[1]);
+        $this->assertSame(['stage' => 'before', 'lane' => 'lane.primary', 'level' => 'primary', 'pipeline' => 'p1', 'operation' => 'db.query', 'sql' => 'SELECT 1', 'bypass_deny_block' => false], $recorded[0]);
+        $this->assertSame(['stage' => 'before', 'lane' => 'lane.extra', 'level' => 'extra', 'pipeline' => 'p2', 'operation' => 'db.query', 'sql' => 'SELECT 1', 'bypass_deny_block' => false], $recorded[1]);
         $this->assertSame(['stage' => 'action'], $recorded[2]);
         $this->assertSame(['stage' => 'after', 'lane' => 'lane.extra', 'level' => 'extra', 'pipeline' => 'p2'], $recorded[3]);
         $this->assertSame(['stage' => 'after', 'lane' => 'lane.primary', 'level' => 'primary', 'pipeline' => 'p1'], $recorded[4]);
+    }
+
+    public function testExecutePassesBypassDenyBlockAttributeIntoContext(): void
+    {
+        $container = new ContainerBuilder();
+        $recorded = [];
+
+        $container->set('gohany.circuitbreaker.pipeline.p1', new TestPipeline($recorded));
+
+        $executor = new DoctrineLaneExecutor($container);
+        $laneContext = new DoctrineLaneContext(
+            new DoctrineLaneAcquisition('p1', 'lane.primary')
+        );
+
+        $executor->execute(
+            $laneContext,
+            'db.query',
+            function (): string {
+                return 'done';
+            },
+            ['cb_bypass_deny_block' => true]
+        );
+
+        $this->assertTrue($recorded[0]['bypass_deny_block']);
     }
 }
 
@@ -89,6 +113,7 @@ final class TestPipeline
             'pipeline' => (string) $ctx->get('dbal.bulkhead.pipeline'),
             'operation' => $ctx->getOperation(),
             'sql' => (string) $ctx->get('dbal.sql', ''),
+            'bypass_deny_block' => $ctx->get('cb_bypass_deny_block', false),
         ];
 
         $result = $next();

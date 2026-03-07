@@ -26,15 +26,19 @@ final class ResilientDbalMiddleware implements Middleware
     private $emitter;
     /** @var DoctrineLaneResolverInterface */
     private $laneResolver;
+    /** @var bool */
+    private $bypassDenyBlock;
 
     public function __construct(
         ContainerInterface $container,
         EmitterInterface $emitter,
-        DoctrineLaneResolverInterface $laneResolver
+        DoctrineLaneResolverInterface $laneResolver,
+        $bypassDenyBlock = false
     ) {
         $this->container = $container;
         $this->emitter = $emitter;
         $this->laneResolver = $laneResolver;
+        $this->bypassDenyBlock = $this->normalizeBoolean($bypassDenyBlock);
     }
 
     public function wrap(Driver $driver): Driver
@@ -43,7 +47,20 @@ final class ResilientDbalMiddleware implements Middleware
             $driver,
             $this->container,
             $this->emitter,
-            $this->laneResolver
+            $this->laneResolver,
+            $this->bypassDenyBlock
         );
+    }
+
+    /**
+     * @param mixed $value
+     */
+    private function normalizeBoolean($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN) === true;
     }
 }

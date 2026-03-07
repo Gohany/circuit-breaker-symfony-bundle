@@ -160,9 +160,40 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
 
         $defaultTags = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default')->getTag('doctrine.dbal.middleware');
         $readonlyTags = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.readonly')->getTag('doctrine.dbal.middleware');
+        $defaultMiddlewareArgs = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default')->getArguments();
 
         $this->assertSame('default', $defaultTags[0]['connection'] ?? null);
         $this->assertSame('readonly', $readonlyTags[0]['connection'] ?? null);
+        $this->assertSame('%gohany_circuitbreaker.bypass_deny_block%', $defaultMiddlewareArgs[3]);
+        $this->assertFalse($container->getParameter('gohany_circuitbreaker.bypass_deny_block'));
+    }
+
+    public function testDoctrineMiddlewareAcceptsEnvBypassDenyBlockFlag(): void
+    {
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'bypass_deny_block' => '%env(bool:CB_BYPASS_DENY_BLOCK)%',
+                'profiles' => [
+                    'default' => [
+                        'doctrine' => [
+                            'enabled' => true,
+                            'connections' => ['default'],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $args = $container->getDefinition('gohany.circuitbreaker.doctrine.dbal_middleware.default')->getArguments();
+
+        $this->assertSame('%gohany_circuitbreaker.bypass_deny_block%', $args[3]);
+        $this->assertSame('%env(bool:CB_BYPASS_DENY_BLOCK)%', $container->getParameter('gohany_circuitbreaker.bypass_deny_block'));
     }
 
     public function testDoctrineAppliesPerConnectionSettingsOverrides(): void

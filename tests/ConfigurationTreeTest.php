@@ -23,6 +23,7 @@ final class ConfigurationTreeTest extends TestCase
         $this->assertSame('default', $cfg['default_profile']);
         $this->assertSame('gohany.circuitbreaker.redis_client', $cfg['redis_client_service']);
         $this->assertSame('cb', $cfg['key_prefix']);
+        $this->assertFalse($cfg['bypass_deny_block']);
     }
 
     public function testConfigProcessesWithCustomRedisClientService(): void

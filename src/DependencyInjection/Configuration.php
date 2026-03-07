@@ -20,6 +20,7 @@ final class Configuration implements ConfigurationInterface
                 ->scalarNode('default_profile')->defaultValue('default')->end()
                 ->scalarNode('redis_client_service')->defaultValue('gohany.circuitbreaker.redis_client')->end()
                 ->scalarNode('key_prefix')->defaultValue('cb')->end()
+                ->variableNode('bypass_deny_block')->defaultFalse()->end()
                 ->arrayNode('profiles')
                     ->useAttributeAsKey('name')
                     ->arrayPrototype()

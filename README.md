@@ -119,6 +119,9 @@ gohany_circuitbreaker:
   # service id that implements RedisClientInterface
   redis_client_service: 'gohany.circuitbreaker.redis_client'
   key_prefix: 'cb'
+  # optional test/support switch: allow all pipeline stages except final deny block
+  # (supports env values like true/false/1/0 via bool processor)
+  bypass_deny_block: '%env(bool:CB_BYPASS_DENY_BLOCK)%'
 
   profiles:
     default:

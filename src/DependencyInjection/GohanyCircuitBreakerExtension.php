@@ -45,6 +45,7 @@ final class GohanyCircuitBreakerExtension extends Extension
 
         $container->setParameter('gohany_circuitbreaker.active_profile', $active);
         $container->setParameter('gohany_circuitbreaker.key_prefix', $config['key_prefix']);
+        $container->setParameter('gohany_circuitbreaker.bypass_deny_block', $config['bypass_deny_block'] ?? false);
 
         // Pools
         $poolServiceIds = [];
@@ -247,6 +248,7 @@ final class GohanyCircuitBreakerExtension extends Extension
             new Reference('service_container'),
             new Reference('gohany.circuitbreaker.emitter'),
             new Reference($laneResolverServiceId),
+            '%gohany_circuitbreaker.bypass_deny_block%',
         ]);
         $mw->addTag('doctrine.dbal.middleware', ['connection' => $connectionName]);
 

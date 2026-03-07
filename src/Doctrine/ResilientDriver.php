@@ -25,17 +25,21 @@ final class ResilientDriver implements Driver
     private $emitter;
     /** @var DoctrineLaneResolverInterface */
     private $laneResolver;
+    /** @var bool */
+    private $bypassDenyBlock;
 
     public function __construct(
         Driver $driver,
         ContainerInterface $container,
         EmitterInterface $emitter,
-        DoctrineLaneResolverInterface $laneResolver
+        DoctrineLaneResolverInterface $laneResolver,
+        bool $bypassDenyBlock = false
     ) {
         $this->driver = $driver;
         $this->container = $container;
         $this->emitter = $emitter;
         $this->laneResolver = $laneResolver;
+        $this->bypassDenyBlock = $bypassDenyBlock;
     }
 
     public function connect(array $params): Connection
@@ -51,14 +55,18 @@ final class ResilientDriver implements Driver
             function () use ($params): Connection {
                 return $this->driver->connect($params);
             },
-            ['dbal.params' => $this->redactParams($params)]
+            [
+                'dbal.params' => $this->redactParams($params),
+                'cb_bypass_deny_block' => $this->bypassDenyBlock,
+            ]
         );
 
         return new ResilientDriverConnection(
             $conn,
             $this->container,
             $this->emitter,
-            $this->laneResolver
+            $this->laneResolver,
+            $this->bypassDenyBlock
         );
     }
 
