@@ -111,8 +111,11 @@ final class GohanyCircuitBreakerExtension extends Extension
                     if (is_string($retry) && trim($retry) !== '') {
                         $retry = $this->resolveRetrySpec($container, $retry);
 
-                        // Fail fast on invalid specs (including env-resolved values).
-                        (new RtryPolicyFactory())->fromSpec($retry);
+                        // Fail fast on invalid specs, but skip validation when the
+                        // value is still an unresolved env placeholder (runtime only).
+                        if (!$this->isEnvPlaceholder($retry)) {
+                            (new RtryPolicyFactory())->fromSpec($retry);
+                        }
 
                         $stageDefs[] = new Definition(RtryRetryMiddleware::class, [
                             $retry,
