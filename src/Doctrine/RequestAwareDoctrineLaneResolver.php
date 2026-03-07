@@ -8,6 +8,9 @@ use Symfony\Component\HttpFoundation\RequestStack;
 
 final class RequestAwareDoctrineLaneResolver implements DoctrineLaneResolverInterface
 {
+    private const ATTR_PARENT_LANE = 'cb.db.parent_lane';
+    private const ATTR_CHILD_LANE = 'cb.db.child_lane';
+
     /** @var DoctrineLaneResolverInterface */
     private $fallback;
     /** @var RequestStack */
@@ -64,13 +67,20 @@ final class RequestAwareDoctrineLaneResolver implements DoctrineLaneResolverInte
 
         $extraLanes = $base->getExtraLanes();
 
-        $parentLane = $this->findLane($this->parentLaneMap, $route, $path);
-        if ($parentLane !== null) {
+        $parentLaneAttr = $request->attributes->get(self::ATTR_PARENT_LANE);
+        $childLaneAttr = $request->attributes->get(self::ATTR_CHILD_LANE);
+
+        $parentLane = is_string($parentLaneAttr) && $parentLaneAttr !== ''
+            ? $parentLaneAttr
+            : $this->findLane($this->parentLaneMap, $route, $path);
+        if ($parentLane !== null && $this->parentPipeline !== null && $this->parentPipeline !== '') {
             $extraLanes[] = new DoctrineLaneAcquisition($this->parentPipeline, $parentLane);
         }
 
-        $childLane = $this->findLane($this->childLaneMap, $route, $path);
-        if ($childLane !== null) {
+        $childLane = is_string($childLaneAttr) && $childLaneAttr !== ''
+            ? $childLaneAttr
+            : $this->findLane($this->childLaneMap, $route, $path);
+        if ($childLane !== null && $this->childPipeline !== null && $this->childPipeline !== '') {
             $extraLanes[] = new DoctrineLaneAcquisition($this->childPipeline, $childLane);
         }
 
