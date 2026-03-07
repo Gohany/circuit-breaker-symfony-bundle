@@ -50,24 +50,7 @@ final class GohanyCircuitBreakerExtension extends Extension
         // Pools
         $poolServiceIds = [];
         foreach (($p['pools'] ?? []) as $poolId => $poolCfg) {
-            $lanes = [];
-            foreach (($poolCfg['lanes'] ?? []) as $laneName => $laneCfg) {
-                if ($poolCfg['mode'] === 'fixed') {
-                    $lanes[$laneName] = LanePolicy::fixed($laneName, (int) ($laneCfg['max_concurrent'] ?? 1));
-                } elseif ($poolCfg['mode'] === 'percent') {
-                    $lanes[$laneName] = LanePolicy::percent($laneName, (float) ($laneCfg['percent'] ?? 0.1));
-                } else {
-                    $lanes[$laneName] = LanePolicy::weight($laneName, (int) ($laneCfg['weight'] ?? 1));
-                }
-            }
-
-            $policy = new PoolPolicy(
-                (string) $poolId,
-                (int) $poolCfg['global_max'],
-                (string) $poolCfg['mode'],
-                (float) $poolCfg['soft_borrow_utilization_threshold'],
-                $lanes
-            );
+            $policy = $this->createPoolPolicyDefinition((string) $poolId, $poolCfg);
 
             $def = new Definition(RedisPoolBulkhead::class);
             $def->setArguments([
@@ -254,6 +237,52 @@ final class GohanyCircuitBreakerExtension extends Extension
 
         $serviceId = sprintf('gohany.circuitbreaker.doctrine.dbal_middleware.%s', $connectionName);
         $container->setDefinition($serviceId, $mw);
+    }
+
+    /**
+     * @param array<string,mixed> $poolCfg
+     */
+    private function createPoolPolicyDefinition(string $poolId, array $poolCfg): Definition
+    {
+        $mode = (string) ($poolCfg['mode'] ?? 'weighted');
+        $laneDefinitions = [];
+        foreach (($poolCfg['lanes'] ?? []) as $laneName => $laneCfg) {
+            $laneDefinitions[$laneName] = $this->createLanePolicyDefinition(
+                (string) $laneName,
+                $mode,
+                is_array($laneCfg) ? $laneCfg : []
+            );
+        }
+
+        return new Definition(PoolPolicy::class, [
+            $poolId,
+            (int) ($poolCfg['global_max'] ?? 0),
+            $mode,
+            (float) ($poolCfg['soft_borrow_utilization_threshold'] ?? 0.8),
+            $laneDefinitions,
+        ]);
+    }
+
+    /**
+     * @param array<string,mixed> $laneCfg
+     */
+    private function createLanePolicyDefinition(string $laneName, string $mode, array $laneCfg): Definition
+    {
+        if ($mode === 'fixed') {
+            return (new Definition(LanePolicy::class))
+                ->setFactory([LanePolicy::class, 'fixed'])
+                ->setArguments([$laneName, (int) ($laneCfg['max_concurrent'] ?? 1)]);
+        }
+
+        if ($mode === 'percent') {
+            return (new Definition(LanePolicy::class))
+                ->setFactory([LanePolicy::class, 'percent'])
+                ->setArguments([$laneName, (float) ($laneCfg['percent'] ?? 0.1)]);
+        }
+
+        return (new Definition(LanePolicy::class))
+            ->setFactory([LanePolicy::class, 'weight'])
+            ->setArguments([$laneName, (int) ($laneCfg['weight'] ?? 1)]);
     }
 
     /**

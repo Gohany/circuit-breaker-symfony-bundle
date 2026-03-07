@@ -9,6 +9,7 @@ use Symfony\Component\DependencyInjection\Reference;
 use Gohany\Circuitbreaker\Resilience\RtryRetryMiddleware;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 
 final class GohanyCircuitBreakerExtensionTest extends TestCase
 {
@@ -131,6 +132,45 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertCount(1, $stageDefs);
         $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
         $this->assertSame('%env(CB_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
+    }
+
+    public function testPoolPoliciesAreWiredAsDefinitions(): void
+    {
+        $container = new ContainerBuilder();
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'pools' => [
+                            'odin_http' => [
+                                'global_max' => 100,
+                                'mode' => 'weighted',
+                                'lanes' => [
+                                    'odin.http' => ['weight' => 3],
+                                    'odin.fraud' => ['weight' => 1],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $poolDef = $container->getDefinition('gohany.circuitbreaker.bulkhead.pool.odin_http');
+        $policyArg = $poolDef->getArgument(1);
+
+        $this->assertInstanceOf(Definition::class, $policyArg);
+        $this->assertSame('Gohany\\Circuitbreaker\\Bulkhead\\PoolPolicy', $policyArg->getClass());
+
+        $laneDefs = $policyArg->getArgument(4);
+        $this->assertIsArray($laneDefs);
+        $this->assertInstanceOf(Definition::class, $laneDefs['odin.http']);
+        $this->assertSame(['Gohany\\Circuitbreaker\\Bulkhead\\LanePolicy', 'weight'], $laneDefs['odin.http']->getFactory());
     }
 
     public function testDoctrineRegistersMiddlewarePerConfiguredConnection(): void
