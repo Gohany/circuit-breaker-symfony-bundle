@@ -341,7 +341,10 @@ final class GohanyCircuitBreakerExtension extends Extension
         // Symfony env placeholders may come in several processor forms, e.g.
         // %env(VAR)% or %env(string:VAR)%. Skip eager retry-spec parsing whenever
         // the value contains an env placeholder token.
-        return preg_match('/%env\([^)]+\)%/', $trimmed) === 1;
+        // Also match Symfony's internal unique env placeholder format:
+        // env_{16 hex chars}_{VAR_NAME}_{unique} generated during container compilation.
+        return preg_match('/%env\([^)]+\)%/', $trimmed) === 1
+            || preg_match('/^env_[a-f0-9]{16}_/', $trimmed) === 1;
     }
 
     private function resolveRetrySpec(ContainerBuilder $container, string $retry): string
@@ -352,6 +355,14 @@ final class GohanyCircuitBreakerExtension extends Extension
         // literals (%%env(...)%%). Normalize only env placeholders back before
         // resolving so retry jitter escapes (e.g. %% in specs) stay untouched.
         $normalized = preg_replace('/%%env\(([^)]+)\)%%/', '%env($1)%', $normalized) ?? $normalized;
+
+        // Resolve container parameters (e.g. %hydra_retry_spec% → %env(HYDRA_RETRY_SPEC)%).
+        if (preg_match('/^%[^%]+%$/', $normalized) && $container->getParameterBag()->has(trim($normalized, '%'))) {
+            $resolved = (string) $container->getParameterBag()->resolveValue($normalized);
+            if ($resolved !== $normalized) {
+                $normalized = $resolved;
+            }
+        }
 
         if ($this->isEnvPlaceholder($normalized)) {
             return $normalized;  // Return as-is; resolved at runtime

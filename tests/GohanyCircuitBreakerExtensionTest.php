@@ -212,6 +212,45 @@ final class GohanyCircuitBreakerExtensionTest extends TestCase
         $this->assertSame('%env(HYDRA_RETRY_SPEC)%', $stageDefs[0]->getArgument(0));
     }
 
+    public function testRetryStageAcceptsParameterResolvingToEnvPlaceholder(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('hydra_retry_spec', '%env(HYDRA_RETRY_SPEC)%');
+        $ext = new GohanyCircuitBreakerExtension();
+
+        $_ENV['GOHANY_CB_PROFILE'] = 'default';
+        putenv('GOHANY_CB_PROFILE=default');
+        $_ENV['HYDRA_RETRY_SPEC'] = 'rtry:a=3;d=50ms;cap=500ms';
+        putenv('HYDRA_RETRY_SPEC=rtry:a=3;d=50ms;cap=500ms');
+
+        $ext->load([
+            [
+                'profiles' => [
+                    'default' => [
+                        'pipelines' => [
+                            'doctrine_connect' => [
+                                'stages' => [
+                                    [
+                                        'type' => 'retry',
+                                        'retry' => '%hydra_retry_spec%',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], $container);
+
+        $pipeline = $container->getDefinition('gohany.circuitbreaker.pipeline.doctrine_connect');
+        $stageDefs = $pipeline->getArgument(0);
+
+        $this->assertIsArray($stageDefs);
+        $this->assertCount(1, $stageDefs);
+        $this->assertSame(RtryRetryMiddleware::class, $stageDefs[0]->getClass());
+        // The retry spec should pass through without fromSpec() throwing
+    }
+
     public function testPoolPoliciesAreWiredAsDefinitions(): void
     {
         $container = new ContainerBuilder();
