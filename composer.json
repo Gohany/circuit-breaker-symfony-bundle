@@ -2,10 +2,10 @@
   "name": "gohany/circuitbreaker-symfony-bundle",
   "description": "Symfony bundle wiring for Gohany/Circuitbreaker (PHP 7.4, Symfony 5.4+).",
   "type": "symfony-bundle",
-  "license": "proprietary",
+  "license": "MIT",
   "require": {
     "php": ">=7.4",
-    "gohany/circuitbreaker": "v1.1.2",
+    "gohany/circuitbreaker": "v1.1.3",
     "symfony/framework-bundle": "^5.4 || ^6.0 || ^7.0",
     "symfony/dependency-injection": "^5.4 || ^6.0 || ^7.0",
     "symfony/config": "^5.4 || ^6.0 || ^7.0",
